@@ -148,8 +148,11 @@ public OnConfigsExecuted()
 		while (ReadFileLine(file, map, sizeof(map)))
 		{
 			TrimString(map);
-			String_ToLower(map, map, sizeof(map));
-			PushArrayString(g_MapList, map);
+			if (map[0] != 0)
+			{
+				String_ToLower(map, map, sizeof(map));
+				PushArrayString(g_MapList, map);
+			}
 		}
 
 		CloseHandle(file);
