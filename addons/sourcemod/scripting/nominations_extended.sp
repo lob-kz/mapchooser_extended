@@ -52,6 +52,8 @@ public Plugin:myinfo =
 new Handle:g_Cvar_ExcludeOld = INVALID_HANDLE;
 new Handle:g_Cvar_ExcludeCurrent = INVALID_HANDLE;
 
+new Handle:g_Cvar_MapCycleFile = INVALID_HANDLE;
+
 new Handle:g_MapList = INVALID_HANDLE;
 new Handle:g_MapMenu = INVALID_HANDLE;
 new g_mapFileSerial = -1;
@@ -80,6 +82,8 @@ public OnPluginStart()
 	g_Cvar_ExcludeOld = CreateConVar("sm_nominate_excludeold", "1", "Specifies if the current map should be excluded from the Nominations list", 0, true, 0.00, true, 1.0);
 	g_Cvar_ExcludeCurrent = CreateConVar("sm_nominate_excludecurrent", "1", "Specifies if the MapChooser excluded maps should also be excluded from Nominations", 0, true, 0.00, true, 1.0);
 	
+	g_Cvar_MapCycleFile = CreateConVar("sm_nominate_mapcyclefile", "", "Custom mapcycle file, because SourceMod is bad and slow");
+
 	RegConsoleCmd("say", Command_Say);
 	RegConsoleCmd("say_team", Command_Say);
 	
@@ -88,7 +92,7 @@ public OnPluginStart()
 	RegAdminCmd("sm_nominate_addmap", Command_Addmap, ADMFLAG_CHANGEMAP, "sm_nominate_addmap <mapname> - Forces a map to be on the next mapvote.");
 	
 	// Nominations Extended cvars
-	CreateConVar("ne_version", MCE_VERSION, "Nominations Extended Version", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_NOTIFY|FCVAR_DONTRECORD);
+	CreateConVar("ne_version", MCE_VERSION, "Nominations Extended Version", FCVAR_SPONLY|FCVAR_NOTIFY|FCVAR_DONTRECORD);
 
 
 	g_mapTrie = CreateTrie();
@@ -100,20 +104,57 @@ public OnAllPluginsLoaded()
 	g_Cvar_MarkCustomMaps = FindConVar("mce_markcustommaps");
 }
 
+stock void String_ToLower(const char[] input, char[] output, int size)
+{
+	size--;
+	int i = 0;
+	while (input[i] != '\0' && i < size)
+	{
+		output[i] = CharToLower(input[i]);
+		i++;
+	}
+	output[i] = '\0';
+}
+
 public OnConfigsExecuted()
 {
-	if (ReadMapList(g_MapList,
+	ClearArray(g_MapList);
+
+	decl String:mapcyclefile[PLATFORM_MAX_PATH];
+	GetConVarString(g_Cvar_MapCycleFile, mapcyclefile, sizeof(mapcyclefile));
+	if (StrEqual(mapcyclefile, ""))
+	{
+		if (ReadMapList(g_MapList,
 					g_mapFileSerial,
 					"nominations",
 					MAPLIST_FLAG_CLEARARRAY|MAPLIST_FLAG_MAPSFOLDER)
-		== INVALID_HANDLE)
-	{
-		if (g_mapFileSerial == -1)
+			== INVALID_HANDLE)
 		{
-			SetFailState("Unable to create a valid map list.");
+			if (g_mapFileSerial == -1)
+			{
+				SetFailState("Unable to create a valid map list.");
+			}
 		}
 	}
-	
+	else
+	{
+		Handle file = OpenFile(mapcyclefile, "r");
+		if (file == null)
+		{
+			SetFailState("Unable to open mapcycle file specified in sm_nominate_mapcyclefile.");
+		}
+
+		decl String:map[PLATFORM_MAX_PATH];
+		while (ReadFileLine(file, map, sizeof(map)))
+		{
+			TrimString(map);
+			String_ToLower(map, map, sizeof(map));
+			PushArrayString(g_MapList, map);
+		}
+
+		CloseHandle(file);
+	}
+
 	BuildMapMenu();
 }
 
