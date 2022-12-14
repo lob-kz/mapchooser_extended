@@ -114,6 +114,7 @@ new Handle:g_Cvar_Extend = INVALID_HANDLE;
 new Handle:g_Cvar_DontChange = INVALID_HANDLE;
 new Handle:g_Cvar_EndOfMapVote = INVALID_HANDLE;
 new Handle:g_Cvar_VoteDuration = INVALID_HANDLE;
+new Handle:g_Cvar_MapCycleFile = INVALID_HANDLE;
 
 new Handle:g_VoteTimer = INVALID_HANDLE;
 new Handle:g_RetryTimer = INVALID_HANDLE;
@@ -260,6 +261,7 @@ public OnPluginStart()
 	g_Cvar_RandomizeNominations = CreateConVar("mce_randomizeorder", "0", "Randomize map order?", _, true, 0.0, true, 1.0);
 	g_Cvar_HideTimer = CreateConVar("mce_hidetimer", "0", "Hide the MapChooser Extended warning timer", _, true, 0.0, true, 1.0);
 	g_Cvar_NoVoteOption = CreateConVar("mce_addnovote", "1", "Add \"No Vote\" to vote menu?", _, true, 0.0, true, 1.0);
+	g_Cvar_MapCycleFile = CreateConVar("sm_mapchooser_mapcyclefile", "", "Custom mapcycle file, because SourceMod is bad and slow");
 
 	RegAdminCmd("sm_mapvote", Command_Mapvote, ADMFLAG_CHANGEMAP, "sm_mapvote - Forces MapChooser to attempt to run a map vote now.");
 	RegAdminCmd("sm_setnextmap", Command_SetNextmap, ADMFLAG_CHANGEMAP, "sm_setnextmap <map>");
@@ -443,19 +445,58 @@ public OnMapStart()
 	}
 }
 
+stock void String_ToLower(const char[] input, char[] output, int size)
+{
+	size--;
+	int i = 0;
+	while (input[i] != '\0' && i < size)
+	{
+		output[i] = CharToLower(input[i]);
+		i++;
+	}
+	output[i] = '\0';
+}
+
 public OnConfigsExecuted()
 {
-	if (ReadMapList(g_MapList,
+	ClearArray(g_MapList);
+
+	decl String:mapcyclefile[PLATFORM_MAX_PATH];
+	GetConVarString(g_Cvar_MapCycleFile, mapcyclefile, sizeof(mapcyclefile));
+	if (StrEqual(mapcyclefile, ""))
+	{
+		if (ReadMapList(g_MapList,
 					 g_mapFileSerial, 
 					 "mapchooser",
 					 MAPLIST_FLAG_CLEARARRAY|MAPLIST_FLAG_MAPSFOLDER)
-		!= INVALID_HANDLE)
-		
-	{
-		if (g_mapFileSerial == -1)
+			!= INVALID_HANDLE)
 		{
-			LogError("Unable to create a valid map list.");
+			if (g_mapFileSerial == -1)
+			{
+				LogError("Unable to create a valid map list.");
+			}
 		}
+	}
+	else
+	{
+		Handle file = OpenFile(mapcyclefile, "r");
+		if (file == null)
+		{
+			SetFailState("Unable to open mapcycle file specified in sm_nominate_mapcyclefile.");
+		}
+
+		decl String:map[PLATFORM_MAX_PATH];
+		while (ReadFileLine(file, map, sizeof(map)))
+		{
+			TrimString(map);
+			if (map[0] != 0)
+			{
+				String_ToLower(map, map, sizeof(map));
+				PushArrayString(g_MapList, map);
+			}
+		}
+
+		CloseHandle(file);
 	}
 	
 	// Disable the next level vote in TF2 and CS:GO
